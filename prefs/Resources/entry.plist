@@ -10,6 +10,8 @@
 		<string>PSLinkCell</string>
 		<key>detail</key>
 		<string>DNRootListController</string>
+		<key>isController</key>
+		<true/>
 		<key>label</key>
 		<string>DayNightSwitch</string>
 	</dict>
