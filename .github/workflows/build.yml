@@ -7,27 +7,26 @@ on:
       - 'src/**'
       - 'prefs/**'
       - 'control'
-      - 'tools/build-linux.sh'
+      - 'tools/**'
       - '.github/workflows/build.yml'
 
 jobs:
   build:
-    runs-on: ubuntu-22.04
+    runs-on: macos-latest
     steps:
       - uses: actions/checkout@v4
 
-      - name: 安装依赖
+      - name: 环境
         run: |
-          sudo apt-get update
-          sudo apt-get install -y curl git make unzip xz-utils python3 dpkg-dev file libtinfo5 || true
-          sudo apt-get install -y curl git make unzip xz-utils python3 dpkg-dev file
-          sudo apt-get install -y clang || true
+          sw_vers
+          xcodebuild -version
+          xcrun --sdk iphoneos --show-sdk-version
 
       - name: 构建
         run: |
           set -o pipefail
-          chmod +x tools/build-linux.sh
-          bash tools/build-linux.sh 2>&1 | tee build.log
+          chmod +x tools/build-macos.sh
+          bash tools/build-macos.sh 2>&1 | tee build.log
 
       - name: 上传 deb
         if: always()
