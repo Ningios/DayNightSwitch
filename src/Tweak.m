@@ -88,7 +88,8 @@ static void DNAttach(UISwitch *sw) {
         [sw addSubview:v];
         v.isAccessibilityElement = NO;
     }
-    [sw bringSubviewToFront:v];
+    // 只在需要时调整层级，避免 layoutSubviews 里反复重排
+    if (sw.subviews.lastObject != v) [sw bringSubviewToFront:v];
     if (!CGRectEqualToRect(v.frame, b)) v.frame = b;
     if (v.on != sw.isOn) [v setOn:sw.isOn animated:NO];
 }
@@ -129,7 +130,7 @@ static void DN_layoutSubviews(UISwitch *self, SEL _cmd) {
         return;
     }
     if (!CGRectEqualToRect(v.frame, self.bounds)) v.frame = self.bounds;
-    [self bringSubviewToFront:v];
+    if (self.subviews.lastObject != v) [self bringSubviewToFront:v];
 }
 
 static void DN_setOnAnimated(UISwitch *self, SEL _cmd, BOOL on, BOOL animated) {

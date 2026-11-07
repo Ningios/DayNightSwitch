@@ -54,7 +54,7 @@ def main():
         if base.startswith(os.path.join(stage, 'DEBIAN')):
             continue
         rel = './' + os.path.relpath(base, stage).replace(os.sep, '/')
-        if rel == './':
+        if rel in ('./', './.'):
             continue
         data.append((rel, base, 0o755))
         for f in files:
