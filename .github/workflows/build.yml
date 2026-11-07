@@ -1,0 +1,38 @@
+name: build
+
+on:
+  workflow_dispatch:
+  push:
+    paths:
+      - 'src/**'
+      - 'prefs/**'
+      - 'control'
+      - 'tools/build-linux.sh'
+      - '.github/workflows/build.yml'
+
+jobs:
+  build:
+    runs-on: ubuntu-22.04
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: 安装依赖
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y curl git make unzip xz-utils python3 dpkg-dev file
+          sudo apt-get install -y clang || true
+
+      - name: 构建
+        run: |
+          chmod +x tools/build-linux.sh
+          bash tools/build-linux.sh 2>&1 | tee build.log
+
+      - name: 上传 deb
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: daynightswitch-deb
+          path: |
+            dist/*.deb
+            build.log
+          if-no-files-found: warn
