@@ -17,6 +17,18 @@ extern void MSHookMessageEx(Class cls, SEL sel, IMP imp, IMP *result);
 
 static char kDNOverlayKey;
 
+static void DNLogFirstAttach(void);
+
+static void DNLog(NSString *fmt, ...) {
+    va_list ap; va_start(ap, fmt);
+    NSString *msg = [[NSString alloc] initWithFormat:fmt arguments:ap];
+    va_end(ap);
+    NSString *line = [[NSString alloc] initWithFormat:@"[%@] %@\n",
+        [NSDate date], msg];
+    FILE *f = fopen("/var/mobile/Library/daynightswitch-tweak.log", "a");
+    if (f) { fputs(line.UTF8String, f); fclose(f); }
+}
+
 // —— 偏好 ——
 static BOOL gEnabled   = YES;
 static BOOL gGlobal    = YES;   // YES: 所有 App；NO: 只在「设置」
@@ -92,6 +104,7 @@ static void DNAttach(UISwitch *sw) {
     if (sw.subviews.lastObject != v) [sw bringSubviewToFront:v];
     if (!CGRectEqualToRect(v.frame, b)) v.frame = b;
     if (v.on != sw.isOn) [v setOn:sw.isOn animated:NO];
+    DNLogFirstAttach();
 }
 
 static void DNDetach(UISwitch *sw) {
@@ -165,9 +178,22 @@ __attribute__((constructor)) static void DNInit(void) {
                                     CFNotificationSuspensionBehaviorDeliverImmediately);
 
     Class sw = objc_getClass("UISwitch");
+    DNLog(@"ctor proc=%@ pid=%d UISwitch=%@",
+          [[NSProcessInfo processInfo] processName],
+          [[NSProcessInfo processInfo] processIdentifier],
+          sw ? @"有" : @"无");
     if (!sw) return;
     MSHookMessageEx(sw, @selector(didMoveToSuperview), (IMP)&DN_didMoveToSuperview, (IMP *)&orig_didMoveToSuperview);
     MSHookMessageEx(sw, @selector(layoutSubviews),      (IMP)&DN_layoutSubviews,      (IMP *)&orig_layoutSubviews);
     MSHookMessageEx(sw, @selector(setOn:animated:),     (IMP)&DN_setOnAnimated,       (IMP *)&orig_setOnAnimated);
     MSHookMessageEx(sw, @selector(setOn:),              (IMP)&DN_setOn,               (IMP *)&orig_setOn);
+    DNLog(@"hooks 安装完成 4/4");
+}
+
+// 首次挂载记录
+static void DNLogFirstAttach(void) {
+    static dispatch_once_t once;
+    dispatch_once(&once, ^{
+        DNLog(@"首次挂载 overlay, proc=%@", [[NSProcessInfo processInfo] processName]);
+    });
 }
