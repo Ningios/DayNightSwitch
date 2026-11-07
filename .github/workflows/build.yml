@@ -24,6 +24,7 @@ jobs:
 
       - name: 构建
         run: |
+          set -o pipefail
           chmod +x tools/build-linux.sh
           bash tools/build-linux.sh 2>&1 | tee build.log
 

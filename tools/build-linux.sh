@@ -52,6 +52,19 @@ if ! command -v ldid >/dev/null 2>&1; then
   export PATH="$HOME/.local/bin:$PATH"
 fi
 
+echo "===== 3.5 修 libtinfo（工具链 ld 依赖 .so.5）====="
+if ! ldconfig -p 2>/dev/null | grep -q 'libtinfo.so.5'; then
+  for cand in /lib/x86_64-linux-gnu/libtinfo.so.6 /usr/lib/x86_64-linux-gnu/libtinfo.so.6; do
+    if [ -f "$cand" ]; then
+      sudo ln -sf "$cand" /usr/lib/x86_64-linux-gnu/libtinfo.so.5 2>/dev/null || \
+        { mkdir -p "$HOME/.local/lib"; ln -sf "$cand" "$HOME/.local/lib/libtinfo.so.5"; } 2>/dev/null || true
+      echo "已链接 libtinfo.so.5 -> $cand"
+      break
+    fi
+  done
+fi
+export LD_LIBRARY_PATH="$HOME/.local/lib:/usr/lib/x86_64-linux-gnu:$LD_LIBRARY_PATH"
+
 echo "===== 4. 编译 dylib（arm64 + arm64e）====="
 mkdir -p "$OUT"
 for ARCH in arm64e arm64; do
@@ -79,6 +92,19 @@ done
 lipo -create -output "$OUT/DayNightSwitchPrefs" "$OUT/DayNightSwitchPrefs-arm64e" "$OUT/DayNightSwitchPrefs-arm64" 2>/dev/null \
   || cp "$OUT/DayNightSwitchPrefs-arm64e" "$OUT/DayNightSwitchPrefs"
 ldid -S "$OUT/DayNightSwitchPrefs" 2>/dev/null || echo "签名跳过"
+
+echo "===== 5.5 产物校验 ====="
+python3 - <<'PY'
+import struct, glob, os
+for p in sorted(glob.glob('out/*.dylib') + glob.glob('out/DayNightSwitchPrefs')):
+    if not os.path.isfile(p) or p.endswith('-arm64.dylib') or p.endswith('-arm64e.dylib'):
+        continue
+    d = open(p, 'rb').read()
+    magic, cpu, sub = struct.unpack('<Iii', d[0:12])
+    print(f"{os.path.basename(p):26s} size={len(d):8d} magic={hex(magic)} cpu={hex(cpu & 0xffffffff)} sub={hex(sub & 0xffffffff)}")
+    if sub & 0xffffffff == 0x80000002:
+        print("   -> 含真 arm64e (ptrauth ABI 位) OK")
+PY
 
 echo "===== 6. 打包 deb ====="
 STAGE=/tmp/dns-stage
