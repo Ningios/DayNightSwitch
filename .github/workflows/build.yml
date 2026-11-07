@@ -19,6 +19,7 @@ jobs:
       - name: 安装依赖
         run: |
           sudo apt-get update
+          sudo apt-get install -y curl git make unzip xz-utils python3 dpkg-dev file libtinfo5 || true
           sudo apt-get install -y curl git make unzip xz-utils python3 dpkg-dev file
           sudo apt-get install -y clang || true
 

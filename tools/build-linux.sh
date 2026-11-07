@@ -53,7 +53,7 @@ if ! command -v ldid >/dev/null 2>&1; then
 fi
 
 echo "===== 3.5 修 libtinfo（工具链 ld 依赖 .so.5）====="
-if ! ldconfig -p 2>/dev/null | grep -q 'libtinfo.so.5'; then
+if [ ! -e /usr/lib/x86_64-linux-gnu/libtinfo.so.5 ] && ! ldconfig -p 2>/dev/null | grep -q 'libtinfo.so.5'; then
   for cand in /lib/x86_64-linux-gnu/libtinfo.so.6 /usr/lib/x86_64-linux-gnu/libtinfo.so.6; do
     if [ -f "$cand" ]; then
       sudo ln -sf "$cand" /usr/lib/x86_64-linux-gnu/libtinfo.so.5 2>/dev/null || \
