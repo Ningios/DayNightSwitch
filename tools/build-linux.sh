@@ -85,9 +85,14 @@ ldid -S "$OUT/DayNightSwitch.dylib" 2>/dev/null || echo "签名跳过"
 
 echo "===== 5. 编译设置 bundle 可执行文件 ====="
 for ARCH in arm64e arm64; do
-  "$SYS_CLANG" -fobjc-arc -O2 -isysroot "$SDK" -target ${ARCH}-apple-ios15.0 -bundle \
-    -framework Foundation -framework UIKit -Wl,-undefined,dynamic_lookup \
-    -o "$OUT/DayNightSwitchPrefs-$ARCH" prefs/DNRootListController.m
+  OBJ="$OUT/prefs-$ARCH"; mkdir -p "$OBJ"
+  "$SYS_CLANG" -c -fobjc-arc -O2 -isysroot "$SDK" -target ${ARCH}-apple-ios15.0 \
+    -Wno-deprecated-declarations -o "$OBJ/DNRootListController.o" prefs/DNRootListController.m
+  # 必须用工具链自带的 ld64，系统 GNU ld 不认 -bundle/-dynamic
+  "$LD_FOUND" -bundle -arch $ARCH -platform_version ios 15.0 16.5 \
+    -syslibroot "$SDK" -undefined dynamic_lookup \
+    -framework Foundation -framework UIKit \
+    -o "$OUT/DayNightSwitchPrefs-$ARCH" "$OBJ"/*.o
 done
 lipo -create -output "$OUT/DayNightSwitchPrefs" "$OUT/DayNightSwitchPrefs-arm64e" "$OUT/DayNightSwitchPrefs-arm64" 2>/dev/null \
   || cp "$OUT/DayNightSwitchPrefs-arm64e" "$OUT/DayNightSwitchPrefs"
