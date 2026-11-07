@@ -11,6 +11,8 @@
 #include <notify.h>
 
 // —— Preferences 私有框架声明（含真 ivar）——
+@class PSSpecifier;
+
 @interface PSListController : UIViewController
 {
     NSArray *_specifiers;
