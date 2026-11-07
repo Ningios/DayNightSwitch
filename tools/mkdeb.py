@@ -16,13 +16,15 @@ def add_ar_member(out, name, data, mode=0o100644, mtime=None):
         out.write(b'\n')
 
 def tar_bytes(root, members, gz=True):
+    # iOS 的 dpkg 不支持 PAX 扩展头（type 'x'），必须用 USTAR
     buf = io.BytesIO()
-    with tarfile.open(fileobj=buf, mode='w') as tf:
+    with tarfile.open(fileobj=buf, mode='w', format=tarfile.USTAR_FORMAT) as tf:
         for arc, src, mode in members:
             ti = tf.gettarinfo(src, arcname=arc)
             ti.uid = ti.gid = 0
             ti.uname = ti.gname = 'root'
             ti.mode = mode
+            ti.mtime = 0
             if ti.isdir():
                 tf.addfile(ti)
             else:
