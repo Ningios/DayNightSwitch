@@ -60,27 +60,10 @@ static NSDate *DNFileMTime(NSString *path) {
     return a[NSFileModificationDate];
 }
 
-/// 合并两份 plist：以修改时间较新的为主，较旧的补缺
-static NSDictionary *DNMergedPrefs(void) {
-    NSString *real = DNPrefsRealPath();
-    NSString *jb   = DNPrefsJbRootPath();
-    NSDictionary *dR = [NSDictionary dictionaryWithContentsOfFile:real];
-    NSDictionary *dJ = jb ? [NSDictionary dictionaryWithContentsOfFile:jb] : nil;
-    NSDate *mR = DNFileMTime(real), *mJ = DNFileMTime(jb);
-
-    NSMutableDictionary *out = [NSMutableDictionary dictionary];
-    if (dJ && dR) {
-        BOOL realNewer = (!mJ || (mR && [mR compare:mJ] != NSOrderedAscending));
-        NSDictionary *base = realNewer ? dJ : dR;   // 旧
-        NSDictionary *top  = realNewer ? dR : dJ;   // 新
-        [out addEntriesFromDictionary:base];
-        [out addEntriesFromDictionary:top];
-    } else if (dR) {
-        [out addEntriesFromDictionary:dR];
-    } else if (dJ) {
-        [out addEntriesFromDictionary:dJ];
-    }
-    return out;
+/// 唯一数据源：真实路径的一份 plist（jbroot / cfprefsd 都不参与）
+static NSDictionary *DNPrefsDict(void) {
+    NSDictionary *d = [NSDictionary dictionaryWithContentsOfFile:DNPrefsRealPath()];
+    return d ?: @{};
 }
 
 static BOOL DNValueToBool(id v, BOOL fallback) {
@@ -89,27 +72,15 @@ static BOOL DNValueToBool(id v, BOOL fallback) {
     return fallback;
 }
 
-/// 读取顺序：合并后的 plist → cfprefsd → 默认值
+/// 读取：只认文件里的值，没有就用默认值
 static BOOL DNGetBool(NSString *key, BOOL fallback) {
     static NSDictionary *cached = nil;
     static NSDate *cachedAt = nil;
-    if (!cached || !cachedAt || -[cachedAt timeIntervalSinceNow] > 1.0) {
-        cached = DNMergedPrefs();
+    if (!cached || !cachedAt || -[cachedAt timeIntervalSinceNow] > 0.3) {
+        cached = DNPrefsDict();
         cachedAt = [NSDate date];
     }
-    id v = cached[key];
-    if (v) return DNValueToBool(v, fallback);
-    CFPropertyListRef cv = CFPreferencesCopyAppValue((__bridge CFStringRef)key,
-                                                     (__bridge CFStringRef)kDNBundleID);
-    BOOL r = fallback;
-    if (cv) {
-        if (CFGetTypeID(cv) == CFBooleanGetTypeID()) r = CFBooleanGetValue((CFBooleanRef)cv);
-        else if (CFGetTypeID(cv) == CFNumberGetTypeID()) {
-            int i = 0; CFNumberGetValue((CFNumberRef)cv, kCFNumberIntType, &i); r = (i != 0);
-        }
-        CFRelease(cv);
-    }
-    return r;
+    return DNValueToBool(cached[key], fallback);
 }
 
 static void DNLoadPrefs(void) {

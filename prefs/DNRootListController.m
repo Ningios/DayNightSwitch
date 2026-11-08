@@ -63,36 +63,16 @@ static NSDate *DNFileMTime2(NSString *path) {
 }
 
 static NSDictionary *DNMergedPrefs2(void) {
-    NSString *real = DNPrefsRealPath();
-    NSString *jb   = DNPrefsJbRootPath();
-    NSDictionary *dR = [NSDictionary dictionaryWithContentsOfFile:real];
-    NSDictionary *dJ = jb ? [NSDictionary dictionaryWithContentsOfFile:jb] : nil;
-    NSDate *mR = DNFileMTime2(real), *mJ = DNFileMTime2(jb);
-    NSMutableDictionary *out = [NSMutableDictionary dictionary];
-    if (dJ && dR) {
-        BOOL realNewer = (!mJ || (mR && [mR compare:mJ] != NSOrderedAscending));
-        NSDictionary *base = realNewer ? dJ : dR;
-        NSDictionary *top  = realNewer ? dR : dJ;
-        [out addEntriesFromDictionary:base];
-        [out addEntriesFromDictionary:top];
-    } else if (dR) [out addEntriesFromDictionary:dR];
-    else if (dJ) [out addEntriesFromDictionary:dJ];
-    return out;
+    NSDictionary *d = [NSDictionary dictionaryWithContentsOfFile:DNPrefsRealPath()];
+    return d ?: @{};
 }
 
-/// 双写：cfprefsd + 真实路径 + jbroot 路径，保证两边一致
 static void DNStorePref(NSString *key, id value) {
-    CFPreferencesSetAppValue((__bridge CFStringRef)key,
-                             (__bridge CFPropertyListRef)value,
-                             (__bridge CFStringRef)kDNBundleID);
-    CFPreferencesAppSynchronize((__bridge CFStringRef)kDNBundleID);
-
+    // 只写真实路径这一份（与 tweak 同源，避免被其它副本覆盖）
     NSMutableDictionary *d = [DNMergedPrefs2() mutableCopy] ?: [NSMutableDictionary dictionary];
     if (value) d[key] = value; else [d removeObjectForKey:key];
     [d writeToFile:DNPrefsRealPath() atomically:YES];
-    NSString *jb = DNPrefsJbRootPath();
-    if (jb) [d writeToFile:jb atomically:YES];
-    DNLog(@"[写] %@=%@ real=%@ jb=%@", key, value, DNPrefsRealPath(), jb ?: @"-");
+    DNLog(@"[写] %@=%@ -> %@", key, value, DNPrefsRealPath());
 }
 
 @interface DNRootListController : PSListController
@@ -118,9 +98,6 @@ static void DNStorePref(NSString *key, id value) {
     if (key) {
         id v = DNMergedPrefs2()[key];
         if (v) return v;
-        CFPropertyListRef cv = CFPreferencesCopyAppValue((__bridge CFStringRef)key,
-                                                          (__bridge CFStringRef)kDNBundleID);
-        if (cv) return (__bridge_transfer id)cv;
     }
     return [spec propertyForKey:@"default"];
 }
