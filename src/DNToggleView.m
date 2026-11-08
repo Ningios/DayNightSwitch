@@ -77,6 +77,9 @@ static CGFloat DNScale(CGFloat v) { return v; }
 }
 
 - (void)layoutSubviews {
+    // 兜底：尺寸异常（被父视图放大/整屏）时整块隐藏，绝不整屏渲染
+    if (self.bounds.size.width > 200 || self.bounds.size.height > 200) { self.hidden = YES; return; }
+    self.hidden = NO;
     [super layoutSubviews];
     CGFloat lw = MAX(0.5, self.bounds.size.width * 0.045);
     _outline.frame  = self.bounds;

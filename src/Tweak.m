@@ -160,7 +160,7 @@ static void DNAttach(UISwitch *sw) {
     DNToggleView *v = DNOverlay(sw);
     if (!v) {
         v = [[DNToggleView alloc] initWithFrame:b];
-        v.autoresizingMask = UIViewAutoresizingFlexibleWidth | UIViewAutoresizingFlexibleHeight;
+        v.autoresizingMask = UIViewAutoresizingNone;   // 尺寸只由我们按开关 bounds 显式设置，绝不跟随缩放
         v.backgroundColor = [UIColor clearColor];
         __weak UISwitch *weakSw = sw;
         v.onChange = ^(BOOL on) {
@@ -171,6 +171,9 @@ static void DNAttach(UISwitch *sw) {
             gInUserAction = NO;
             [s sendActionsForControlEvents:UIControlEventValueChanged];
         };
+        v.clipsToBounds = YES;
+        v.layer.masksToBounds = YES;
+        v.layer.cornerRadius = b.size.height / 2;
         if (@available(iOS 13.0, *)) {
             v.layer.cornerCurve = kCACornerCurveContinuous;
         }
@@ -217,6 +220,7 @@ static void DN_layoutSubviews(UISwitch *self, SEL _cmd) {
     if (!DNShouldApply()) { DNDetach(self); return; }
     DNToggleView *v = DNOverlay(self);
     if (!DNSaneBounds(self.bounds)) { DNDetach(self); return; }
+    v.hidden = NO;
     if (!v) {
         DNAttach(self);
         return;
