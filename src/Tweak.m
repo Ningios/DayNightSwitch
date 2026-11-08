@@ -139,10 +139,23 @@ static DNToggleView *DNOverlay(UISwitch *sw) {
 // 用户操作回写 UISwitch 时，避免再次回灌 overlay 造成二次动画
 static BOOL gInUserAction = NO;
 
+static void DNDetach(UISwitch *sw);
+
+// 尺寸闸门：只给「正常大小」的开关挂皮肤，异常尺寸（整屏/零尺寸）一律跳过
+static BOOL DNSaneBounds(CGRect b) {
+    if (b.size.width < 20 || b.size.width > 120) return NO;
+    if (b.size.height < 12 || b.size.height > 70) return NO;
+    return YES;
+}
+
 static void DNAttach(UISwitch *sw) {
     if (!DNShouldApply()) return;
     CGRect b = sw.bounds;
-    if (b.size.width < 10 || b.size.height < 6) return;
+    if (!DNSaneBounds(b)) {
+        // 异常尺寸：把已经挂上的摘掉，避免被放大成整屏
+        DNDetach(sw);
+        return;
+    }
 
     DNToggleView *v = DNOverlay(sw);
     if (!v) {
@@ -203,6 +216,7 @@ static void DN_layoutSubviews(UISwitch *self, SEL _cmd) {
     orig_layoutSubviews(self, _cmd);
     if (!DNShouldApply()) { DNDetach(self); return; }
     DNToggleView *v = DNOverlay(self);
+    if (!DNSaneBounds(self.bounds)) { DNDetach(self); return; }
     if (!v) {
         DNAttach(self);
         return;
