@@ -28,8 +28,8 @@
 - (void)setProperty:(id)value forKey:(id)key;
 @end
 
-static NSString *const kDNBundleID = @"com.ning.daynightswitch";
-static const char *const kDNNotify = "com.ning.daynightswitch/settingschanged";
+static NSString *const kDNBundleID = @"com.ning.switch";
+static const char *const kDNNotify = "com.ning.switch/settingschanged";
 
 static void DNLog(NSString *fmt, ...) {
     va_list ap; va_start(ap, fmt);
@@ -40,7 +40,7 @@ static void DNLog(NSString *fmt, ...) {
     if (f) { fputs(line.UTF8String, f); fclose(f); }
 }
 
-static NSString *DNPrefsFileName(void) { return @"com.ning.daynightswitch.plist"; }
+static NSString *DNPrefsFileName(void) { return @"com.ning.switch.plist"; }
 
 static NSString *DNPrefsRealPath(void) {
     return [@"/var/mobile/Library/Preferences" stringByAppendingPathComponent:DNPrefsFileName()];
@@ -140,6 +140,6 @@ static void DNStorePref(NSString *key, id value) {
 
 // bundle 被加载的证据
 __attribute__((constructor)) static void DNPrefsBundleLoaded(void) {
-    DNLog(@"[加载] DayNightSwitchPrefs.bundle 已加载, DNRootListController=%@",
+    DNLog(@"[加载] SwitchPrefs.bundle 已加载, DNRootListController=%@",
           NSClassFromString(@"DNRootListController") ? @"有" : @"无");
 }

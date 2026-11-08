@@ -5,19 +5,19 @@
 	<key>CFBundleDevelopmentRegion</key>
 	<string>zh_CN</string>
 	<key>CFBundleExecutable</key>
-	<string>DayNightSwitchPrefs</string>
+	<string>SwitchPrefs</string>
 	<key>CFBundleIdentifier</key>
-	<string>com.ning.daynightswitch.prefs</string>
+	<string>com.ning.switch.prefs</string>
 	<key>CFBundleInfoDictionaryVersion</key>
 	<string>6.0</string>
 	<key>CFBundleName</key>
-	<string>DayNightSwitch</string>
+	<string>Switch</string>
 	<key>CFBundlePackageType</key>
 	<string>BNDL</string>
 	<key>CFBundleShortVersionString</key>
-	<string>1.0.0</string>
+	<string>1.0</string>
 	<key>CFBundleVersion</key>
-	<string>1.0.0</string>
+	<string>1.0</string>
 	<key>NSPrincipalClass</key>
 	<string>DNRootListController</string>
 </dict>

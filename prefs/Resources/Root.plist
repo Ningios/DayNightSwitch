@@ -7,59 +7,65 @@
 		<dict>
 			<key>cell</key>
 			<string>PSGroupCell</string>
-			<key>label</key>
-			<string>开关样式</string>
 			<key>footerText</key>
 			<string>把系统开关换成日夜样式：关闭为夜空 + 月亮，打开为蓝天 + 太阳。改动即时生效，已打开的 App 重新进入即可。</string>
+			<key>label</key>
+			<string>开关样式</string>
 		</dict>
 		<dict>
 			<key>cell</key>
 			<string>PSSwitchCell</string>
-			<key>label</key>
-			<string>启用</string>
+			<key>default</key>
+			<true/>
+			<key>defaults</key>
+			<string>com.ning.switch</string>
+			<key>icon</key>
+			<string>ic_enable</string>
 			<key>key</key>
 			<string>enabled</string>
-			<key>default</key>
-			<true/>
-			<key>defaults</key>
-			<string>com.ning.daynightswitch</string>
+			<key>label</key>
+			<string>启用</string>
 		</dict>
 		<dict>
 			<key>cell</key>
 			<string>PSSwitchCell</string>
-			<key>label</key>
-			<string>所有 App 生效</string>
+			<key>default</key>
+			<true/>
+			<key>defaults</key>
+			<string>com.ning.switch</string>
+			<key>icon</key>
+			<string>ic_global</string>
 			<key>key</key>
 			<string>global</string>
-			<key>default</key>
-			<true/>
-			<key>defaults</key>
-			<string>com.ning.daynightswitch</string>
+			<key>label</key>
+			<string>所有 App 生效</string>
 		</dict>
 		<dict>
 			<key>cell</key>
 			<string>PSSwitchCell</string>
-			<key>label</key>
-			<string>「设置」里保留系统样式</string>
-			<key>key</key>
-			<string>excludeSettings</string>
 			<key>default</key>
 			<false/>
 			<key>defaults</key>
-			<string>com.ning.daynightswitch</string>
+			<string>com.ning.switch</string>
 			<key>footerText</key>
 			<string>关闭「所有 App 生效」时，本插件只在「设置」App 内生效。</string>
+			<key>icon</key>
+			<string>ic_exclude</string>
+			<key>key</key>
+			<string>excludeSettings</string>
+			<key>label</key>
+			<string>「设置」里保留系统样式</string>
 		</dict>
 		<dict>
 			<key>cell</key>
 			<string>PSGroupCell</string>
-			<key>label</key>
-			<string>关于</string>
 			<key>footerText</key>
 			<string>设计：Dribbble（Ramakrishna / Tsuriel）· 实现参考：Finn Gaida《DayNightSwitch》(MIT) · 插件：Ning</string>
+			<key>label</key>
+			<string>关于</string>
 		</dict>
 	</array>
 	<key>title</key>
-	<string>DayNightSwitch</string>
+	<string>Switch</string>
 </dict>
 </plist>

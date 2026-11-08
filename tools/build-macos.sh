@@ -19,13 +19,13 @@ for ARCH in arm64e arm64; do
     -target ${ARCH}-apple-ios15.0 -dynamiclib -Isrc \
     -framework Foundation -framework UIKit -framework QuartzCore -framework CoreGraphics \
     -Wl,-undefined,dynamic_lookup \
-    -Wl,-install_name,@loader_path/DayNightSwitch.dylib \
-    -o "$OUT/DayNightSwitch-$ARCH.dylib" src/Tweak.m src/DNToggleView.m
+    -Wl,-install_name,@loader_path/Switch.dylib \
+    -o "$OUT/Switch-$ARCH.dylib" src/Tweak.m src/DNToggleView.m
 done
-xcrun lipo -create -output "$OUT/DayNightSwitch.dylib" \
-  "$OUT/DayNightSwitch-arm64e.dylib" "$OUT/DayNightSwitch-arm64.dylib"
-xcrun codesign --force --sign - "$OUT/DayNightSwitch.dylib"
-xcrun lipo -info "$OUT/DayNightSwitch.dylib"
+xcrun lipo -create -output "$OUT/Switch.dylib" \
+  "$OUT/Switch-arm64e.dylib" "$OUT/Switch-arm64.dylib"
+xcrun codesign --force --sign - "$OUT/Switch.dylib"
+xcrun lipo -info "$OUT/Switch.dylib"
 
 echo "===== 2. 编译设置 bundle 可执行文件 ====="
 for ARCH in arm64e arm64; do
@@ -33,18 +33,18 @@ for ARCH in arm64e arm64; do
     -target ${ARCH}-apple-ios15.0 -bundle \
     -framework Foundation -framework UIKit \
     -Wl,-undefined,dynamic_lookup \
-    -o "$OUT/DayNightSwitchPrefs-$ARCH" prefs/DNRootListController.m
+    -o "$OUT/SwitchPrefs-$ARCH" prefs/DNRootListController.m
 done
-xcrun lipo -create -output "$OUT/DayNightSwitchPrefs" \
-  "$OUT/DayNightSwitchPrefs-arm64e" "$OUT/DayNightSwitchPrefs-arm64"
-xcrun codesign --force --sign - "$OUT/DayNightSwitchPrefs"
-xcrun lipo -info "$OUT/DayNightSwitchPrefs"
+xcrun lipo -create -output "$OUT/SwitchPrefs" \
+  "$OUT/SwitchPrefs-arm64e" "$OUT/SwitchPrefs-arm64"
+xcrun codesign --force --sign - "$OUT/SwitchPrefs"
+xcrun lipo -info "$OUT/SwitchPrefs"
 
 echo "===== 3. 架构校验（arm64e slice 必须 sub=0x80000002）====="
 python3 - <<'PY'
 import struct, sys, os
 bad = []
-for p in ('out/DayNightSwitch.dylib', 'out/DayNightSwitchPrefs'):
+for p in ('out/Switch.dylib', 'out/SwitchPrefs'):
     d = open(p, 'rb').read()
     magic = struct.unpack('>I', d[:4])[0]
     print(f"{os.path.basename(p):24s} {len(d):8d} bytes magic={hex(magic)}")
@@ -73,12 +73,17 @@ STAGE=/tmp/dns-stage
 rm -rf "$STAGE"
 JB="$STAGE/var/jb"
 mkdir -p "$STAGE/DEBIAN" "$JB/Library/MobileSubstrate/DynamicLibraries" \
-         "$JB/Library/PreferenceBundles/DayNightSwitchPrefs.bundle" \
+         "$JB/Library/PreferenceBundles/SwitchPrefs.bundle" \
          "$JB/Library/PreferenceLoader/Preferences"
-cp "$OUT/DayNightSwitch.dylib" src/DayNightSwitch.plist "$JB/Library/MobileSubstrate/DynamicLibraries/"
-cp "$OUT/DayNightSwitchPrefs" "$JB/Library/PreferenceBundles/DayNightSwitchPrefs.bundle/"
-cp prefs/Resources/Info.plist prefs/Resources/Root.plist "$JB/Library/PreferenceBundles/DayNightSwitchPrefs.bundle/"
-cp prefs/Resources/entry.plist "$JB/Library/PreferenceLoader/Preferences/DayNightSwitch.plist"
+cp "$OUT/Switch.dylib" src/Switch.plist "$JB/Library/MobileSubstrate/DynamicLibraries/"
+cp "$OUT/SwitchPrefs" "$JB/Library/PreferenceBundles/SwitchPrefs.bundle/"
+cp prefs/Resources/Info.plist prefs/Resources/Root.plist "$JB/Library/PreferenceBundles/SwitchPrefs.bundle/"
+cp prefs/Resources/icons/*.png "$JB/Library/PreferenceBundles/SwitchPrefs.bundle/"
+cp prefs/Resources/icon.png prefs/Resources/icon@2x.png prefs/Resources/icon@3x.png \
+   "$JB/Library/PreferenceBundles/SwitchPrefs.bundle/" 2>/dev/null || true
+mkdir -p "$STAGE/usr/share/icons"
+cp assets/pkgicon.png "$STAGE/usr/share/icons/com.ning.switch.png"
+cp prefs/Resources/entry.plist "$JB/Library/PreferenceLoader/Preferences/Switch.plist"
 cp control "$STAGE/DEBIAN/control"
 cat > "$STAGE/DEBIAN/postinst" <<'EOF'
 #!/bin/sh
@@ -89,10 +94,10 @@ EOF
 chmod 755 "$STAGE/DEBIAN/postinst"
 find "$STAGE/var" -type d -exec chmod 755 {} \;
 find "$STAGE/var" -type f -exec chmod 644 {} \;
-chmod 755 "$JB/Library/MobileSubstrate/DynamicLibraries/DayNightSwitch.dylib"
-chmod 755 "$JB/Library/PreferenceBundles/DayNightSwitchPrefs.bundle/DayNightSwitchPrefs"
+chmod 755 "$JB/Library/MobileSubstrate/DynamicLibraries/Switch.dylib"
+chmod 755 "$JB/Library/PreferenceBundles/SwitchPrefs.bundle/SwitchPrefs"
 
-DEB="$DIST/com.ning.daynightswitch_${V}_iphoneos-arm64e.deb"
+DEB="$DIST/com.ning.switch_${V}_iphoneos-arm64e.deb"
 rm -f "$DEB"
 python3 tools/mkdeb.py "$STAGE" "$DEB"
 echo "== 产物 =="

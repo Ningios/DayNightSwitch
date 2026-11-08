@@ -34,11 +34,11 @@ static BOOL gEnabled   = YES;
 static BOOL gGlobal    = YES;   // YES: 所有 App；NO: 只在「设置」
 static BOOL gExcludeSettings = NO;
 
-static NSString *const kDNBundleID = @"com.ning.daynightswitch";
-static NSString *const kDNNotify   = @"com.ning.daynightswitch/settingschanged";
+static NSString *const kDNBundleID = @"com.ning.switch";
+static NSString *const kDNNotify   = @"com.ning.switch/settingschanged";
 
 // —— 偏好读取：多来源合并（roothide 下设置进程写 jbroot，App 读真实路径，两边会分裂）——
-static NSString *DNPrefsFileName(void) { return @"com.ning.daynightswitch.plist"; }
+static NSString *DNPrefsFileName(void) { return @"com.ning.switch.plist"; }
 
 static NSString *DNPrefsRealPath(void) {
     return [@"/var/mobile/Library/Preferences" stringByAppendingPathComponent:DNPrefsFileName()];
