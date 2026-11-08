@@ -37,34 +37,99 @@ static BOOL gExcludeSettings = NO;
 static NSString *const kDNBundleID = @"com.ning.daynightswitch";
 static NSString *const kDNNotify   = @"com.ning.daynightswitch/settingschanged";
 
-static BOOL DNGetBool(CFStringRef key, BOOL fallback) {
-    CFPropertyListRef v = CFPreferencesCopyAppValue(key, (__bridge CFStringRef)kDNBundleID);
-    if (!v) return fallback;
-    BOOL r = fallback;
-    if (CFGetTypeID(v) == CFBooleanGetTypeID()) r = CFBooleanGetValue((CFBooleanRef)v);
-    else if (CFGetTypeID(v) == CFNumberGetTypeID()) {
-        int i = 0; CFNumberGetValue((CFNumberRef)v, kCFNumberIntType, &i); r = (i != 0);
+// —— 偏好读取：多来源合并（roothide 下设置进程写 jbroot，App 读真实路径，两边会分裂）——
+static NSString *DNPrefsFileName(void) { return @"com.ning.daynightswitch.plist"; }
+
+static NSString *DNPrefsRealPath(void) {
+    return [@"/var/mobile/Library/Preferences" stringByAppendingPathComponent:DNPrefsFileName()];
+}
+
+/// 由插件 dylib 自身路径推导 jbroot 前缀 → jbroot 内的偏好文件
+static NSString *DNPrefsJbRootPath(void) {
+    NSString *exec = [[NSBundle bundleForClass:[DNToggleView class]] executablePath] ?: @"";
+    NSRange r = [exec rangeOfString:@"/Library/"];
+    if (r.location == NSNotFound) return nil;
+    NSString *jb = [exec substringToIndex:r.location];
+    return [[jb stringByAppendingPathComponent:@"var/mobile/Library/Preferences"]
+            stringByAppendingPathComponent:DNPrefsFileName()];
+}
+
+static NSDate *DNFileMTime(NSString *path) {
+    if (!path) return nil;
+    NSDictionary *a = [[NSFileManager defaultManager] attributesOfItemAtPath:path error:NULL];
+    return a[NSFileModificationDate];
+}
+
+/// 合并两份 plist：以修改时间较新的为主，较旧的补缺
+static NSDictionary *DNMergedPrefs(void) {
+    NSString *real = DNPrefsRealPath();
+    NSString *jb   = DNPrefsJbRootPath();
+    NSDictionary *dR = [NSDictionary dictionaryWithContentsOfFile:real];
+    NSDictionary *dJ = jb ? [NSDictionary dictionaryWithContentsOfFile:jb] : nil;
+    NSDate *mR = DNFileMTime(real), *mJ = DNFileMTime(jb);
+
+    NSMutableDictionary *out = [NSMutableDictionary dictionary];
+    if (dJ && dR) {
+        BOOL realNewer = (!mJ || (mR && [mR compare:mJ] != NSOrderedAscending));
+        NSDictionary *base = realNewer ? dJ : dR;   // 旧
+        NSDictionary *top  = realNewer ? dR : dJ;   // 新
+        [out addEntriesFromDictionary:base];
+        [out addEntriesFromDictionary:top];
+    } else if (dR) {
+        [out addEntriesFromDictionary:dR];
+    } else if (dJ) {
+        [out addEntriesFromDictionary:dJ];
     }
-    CFRelease(v);
+    return out;
+}
+
+static BOOL DNValueToBool(id v, BOOL fallback) {
+    if (!v) return fallback;
+    if ([v isKindOfClass:[NSNumber class]]) return [v boolValue];
+    return fallback;
+}
+
+/// 读取顺序：合并后的 plist → cfprefsd → 默认值
+static BOOL DNGetBool(NSString *key, BOOL fallback) {
+    static NSDictionary *cached = nil;
+    static NSDate *cachedAt = nil;
+    if (!cached || !cachedAt || -[cachedAt timeIntervalSinceNow] > 1.0) {
+        cached = DNMergedPrefs();
+        cachedAt = [NSDate date];
+    }
+    id v = cached[key];
+    if (v) return DNValueToBool(v, fallback);
+    CFPropertyListRef cv = CFPreferencesCopyAppValue((__bridge CFStringRef)key,
+                                                     (__bridge CFStringRef)kDNBundleID);
+    BOOL r = fallback;
+    if (cv) {
+        if (CFGetTypeID(cv) == CFBooleanGetTypeID()) r = CFBooleanGetValue((CFBooleanRef)cv);
+        else if (CFGetTypeID(cv) == CFNumberGetTypeID()) {
+            int i = 0; CFNumberGetValue((CFNumberRef)cv, kCFNumberIntType, &i); r = (i != 0);
+        }
+        CFRelease(cv);
+    }
     return r;
 }
 
 static void DNLoadPrefs(void) {
-    gEnabled = DNGetBool(CFSTR("enabled"), YES);
-    gGlobal  = DNGetBool(CFSTR("global"), YES);
-    gExcludeSettings = DNGetBool(CFSTR("excludeSettings"), NO);
+    gEnabled         = DNGetBool(@"enabled", YES);
+    gGlobal          = DNGetBool(@"global", YES);
+    gExcludeSettings = DNGetBool(@"excludeSettings", NO);
+    DNLog(@"偏好 enabled=%d global=%d exclude=%d (merged)",
+          gEnabled, gGlobal, gExcludeSettings);
 }
 
 /// 当前进程是否需要 + 允许套用
 static BOOL DNShouldApply(void) {
+    // 总开关关 → 全部不套
     if (!gEnabled) return NO;
     if (!objc_getClass("UISwitch")) return NO;
     NSString *bid = [NSBundle mainBundle].bundleIdentifier ?: @"";
-    if (!gGlobal) {
-        return [bid isEqualToString:@"com.apple.Preferences"];
-    }
-    if (gExcludeSettings && [bid isEqualToString:@"com.apple.Preferences"]) return NO;
-    return YES;
+    // 「设置」这一个 App：只由第三个开关单独决定（优先级最高）
+    if ([bid isEqualToString:@"com.apple.Preferences"]) return !gExcludeSettings;
+    // 其他 App：只看第二个「所有 App 生效」
+    return gGlobal;
 }
 
 static DNToggleView *DNOverlay(UISwitch *sw) {
@@ -136,7 +201,7 @@ static void DN_didMoveToSuperview(UISwitch *self, SEL _cmd) {
 
 static void DN_layoutSubviews(UISwitch *self, SEL _cmd) {
     orig_layoutSubviews(self, _cmd);
-    if (!DNShouldApply()) return;
+    if (!DNShouldApply()) { DNDetach(self); return; }
     DNToggleView *v = DNOverlay(self);
     if (!v) {
         DNAttach(self);
@@ -187,7 +252,7 @@ __attribute__((constructor)) static void DNInit(void) {
     MSHookMessageEx(sw, @selector(layoutSubviews),      (IMP)&DN_layoutSubviews,      (IMP *)&orig_layoutSubviews);
     MSHookMessageEx(sw, @selector(setOn:animated:),     (IMP)&DN_setOnAnimated,       (IMP *)&orig_setOnAnimated);
     MSHookMessageEx(sw, @selector(setOn:),              (IMP)&DN_setOn,               (IMP *)&orig_setOn);
-    DNLog(@"hooks 安装完成 4/4");
+    DNLog(@"hooks 安装完成 4/4  v1.0.5");
 }
 
 // 首次挂载记录

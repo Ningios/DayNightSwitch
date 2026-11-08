@@ -1,6 +1,6 @@
 Package: com.ning.daynightswitch
 Name: DayNightSwitch
-Version: 1.0.4
+Version: 1.0.5
 Architecture: iphoneos-arm64e
 Description: 把系统开关（UISwitch）换成日夜样式的胶囊开关：关=夜空+月亮，开=蓝天+太阳。设计来自 Dribbble（Ramakrishna / Tsuriel），实现参考 Finn Gaida 的 DayNightSwitch。
 Depends: mobilesubstrate, firmware (>= 14.0), preferenceloader

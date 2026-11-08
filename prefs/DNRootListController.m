@@ -40,6 +40,61 @@ static void DNLog(NSString *fmt, ...) {
     if (f) { fputs(line.UTF8String, f); fclose(f); }
 }
 
+static NSString *DNPrefsFileName(void) { return @"com.ning.daynightswitch.plist"; }
+
+static NSString *DNPrefsRealPath(void) {
+    return [@"/var/mobile/Library/Preferences" stringByAppendingPathComponent:DNPrefsFileName()];
+}
+
+/// 由设置 bundle 自身路径推导 jbroot 前缀
+static NSString *DNPrefsJbRootPath(void) {
+    NSString *bp = [[NSBundle bundleForClass:NSClassFromString(@"DNRootListController")] bundlePath] ?: @"";
+    NSRange r = [bp rangeOfString:@"/Library/"];
+    if (r.location == NSNotFound) return nil;
+    NSString *jb = [bp substringToIndex:r.location];
+    return [[jb stringByAppendingPathComponent:@"var/mobile/Library/Preferences"]
+            stringByAppendingPathComponent:DNPrefsFileName()];
+}
+
+static NSDate *DNFileMTime2(NSString *path) {
+    if (!path) return nil;
+    NSDictionary *a = [[NSFileManager defaultManager] attributesOfItemAtPath:path error:NULL];
+    return a[NSFileModificationDate];
+}
+
+static NSDictionary *DNMergedPrefs2(void) {
+    NSString *real = DNPrefsRealPath();
+    NSString *jb   = DNPrefsJbRootPath();
+    NSDictionary *dR = [NSDictionary dictionaryWithContentsOfFile:real];
+    NSDictionary *dJ = jb ? [NSDictionary dictionaryWithContentsOfFile:jb] : nil;
+    NSDate *mR = DNFileMTime2(real), *mJ = DNFileMTime2(jb);
+    NSMutableDictionary *out = [NSMutableDictionary dictionary];
+    if (dJ && dR) {
+        BOOL realNewer = (!mJ || (mR && [mR compare:mJ] != NSOrderedAscending));
+        NSDictionary *base = realNewer ? dJ : dR;
+        NSDictionary *top  = realNewer ? dR : dJ;
+        [out addEntriesFromDictionary:base];
+        [out addEntriesFromDictionary:top];
+    } else if (dR) [out addEntriesFromDictionary:dR];
+    else if (dJ) [out addEntriesFromDictionary:dJ];
+    return out;
+}
+
+/// 双写：cfprefsd + 真实路径 + jbroot 路径，保证两边一致
+static void DNStorePref(NSString *key, id value) {
+    CFPreferencesSetAppValue((__bridge CFStringRef)key,
+                             (__bridge CFPropertyListRef)value,
+                             (__bridge CFStringRef)kDNBundleID);
+    CFPreferencesAppSynchronize((__bridge CFStringRef)kDNBundleID);
+
+    NSMutableDictionary *d = [DNMergedPrefs2() mutableCopy] ?: [NSMutableDictionary dictionary];
+    if (value) d[key] = value; else [d removeObjectForKey:key];
+    [d writeToFile:DNPrefsRealPath() atomically:YES];
+    NSString *jb = DNPrefsJbRootPath();
+    if (jb) [d writeToFile:jb atomically:YES];
+    DNLog(@"[写] %@=%@ real=%@ jb=%@", key, value, DNPrefsRealPath(), jb ?: @"-");
+}
+
 @interface DNRootListController : PSListController
 @end
 
@@ -61,9 +116,11 @@ static void DNLog(NSString *fmt, ...) {
 - (id)readPreferenceValue:(PSSpecifier *)spec {
     NSString *key = [spec propertyForKey:@"key"];
     if (key) {
-        CFPropertyListRef v = CFPreferencesCopyAppValue((__bridge CFStringRef)key,
-                                                        (__bridge CFStringRef)kDNBundleID);
-        if (v) return (__bridge_transfer id)v;
+        id v = DNMergedPrefs2()[key];
+        if (v) return v;
+        CFPropertyListRef cv = CFPreferencesCopyAppValue((__bridge CFStringRef)key,
+                                                          (__bridge CFStringRef)kDNBundleID);
+        if (cv) return (__bridge_transfer id)cv;
     }
     return [spec propertyForKey:@"default"];
 }
@@ -71,10 +128,7 @@ static void DNLog(NSString *fmt, ...) {
 - (void)setPreferenceValue:(id)value specifier:(PSSpecifier *)spec {
     NSString *key = [spec propertyForKey:@"key"];
     if (key) {
-        CFPreferencesSetAppValue((__bridge CFStringRef)key,
-                                 (__bridge CFPropertyListRef)value,
-                                 (__bridge CFStringRef)kDNBundleID);
-        CFPreferencesAppSynchronize((__bridge CFStringRef)kDNBundleID);
+        DNStorePref(key, value);
         notify_post(kDNNotify);
     }
     if ([[super class] instancesRespondToSelector:_cmd]) {
