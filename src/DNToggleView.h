@@ -2,8 +2,7 @@
 //  DNToggleView.h
 //  DayNightSwitch for iOS (系统开关美化)
 //
-//  设计：Dribbble - Ramakrishna（原设计）/ Tsuriel（动效）
-//  实现参考：Finn Gaida - DayNightSwitch (MIT)
+//  本插件：Ning
 //  本插件：Ning
 //
 

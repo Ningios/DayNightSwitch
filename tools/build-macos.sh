@@ -22,6 +22,10 @@ C
 xcrun --sdk iphoneos clang -target arm64e-apple-ios15.0 -dynamiclib \
   -install_name @loader_path/.jbroot/usr/lib/libsubstrate.dylib \
   -o /tmp/libsubstrate_stub.dylib /tmp/substub.c
+xcrun --sdk iphoneos clang -target arm64e-apple-ios15.0 -dynamiclib \
+  -install_name @loader_path/.jbroot/usr/lib/libroothide.dylib \
+  -o /tmp/libroothide_stub.dylib /tmp/substub.c
+ls -l /tmp/libroothide_stub.dylib
 ls -l /tmp/libsubstrate_stub.dylib
 
 echo "===== 1. 编译 dylib（arm64e + arm64）====="
@@ -41,6 +45,7 @@ for ARCH in arm64e arm64; do
     -framework Metal -framework MetalKit -framework CoreLocation -framework CoreVideo -framework CoreMedia \
     -Wl,-undefined,dynamic_lookup \
     -Wl,-install_name,@loader_path/.jbroot/Library/MobileSubstrate/DynamicLibraries/Switch.dylib \
+    -Wl,-needed_library,/tmp/libroothide_stub.dylib \
     -o "$OUT/Switch-$ARCH.dylib" $SRCS /tmp/libsubstrate_stub.dylib
 done
 xcrun lipo -create -output "$OUT/Switch.dylib" \
@@ -89,10 +94,57 @@ print("CHECK_FAILED" if bad else "CHECK_OK")
 sys.exit(1 if bad else 0)
 PY
 
+echo "===== 3.5 校验 LC_ID / LC_LOAD_DYLIB（必须与航的一致）====="
+python3 - <<'PY'
+import struct, sys
+data = open('out/Switch.dylib','rb').read()
+magic = struct.unpack('>I', data[:4])[0]
+slices = []
+if magic in (0xcafebabe, 0xcafebabf):
+    n = struct.unpack('>I', data[4:8])[0]
+    for i in range(n):
+        cpu, sub, off, size, al = struct.unpack('>iiIII', data[8+i*20:28+i*20])
+        slices.append((cpu & 0xffffffff, data[off:off+size]))
+else:
+    cpu, sub = struct.unpack('<ii', data[4:12])
+    slices.append((cpu & 0xffffffff, data))
+
+def cmds(b):
+    ncmds = struct.unpack('<I', b[16:20])[0]
+    off = 32
+    idn = None; loads = []
+    for _ in range(ncmds):
+        cmd, sz = struct.unpack('<II', b[off:off+8])
+        if cmd in (0xc, 0xd):
+            noff = struct.unpack('<I', b[off+8:off+12])[0]
+            nm = b[off+noff:off+sz].split(b'\0')[0].decode()
+            if cmd == 0xd: idn = nm
+            else: loads.append(nm)
+        off += sz
+    return idn, loads
+
+ok = True
+for cpu, b in slices:
+    idn, loads = cmds(b)
+    print(f"  slice cpu={hex(cpu)}")
+    print(f"    ID  : {idn}")
+    for l in loads: print(f"    LOAD: {l}")
+    want = {idn, *loads}
+    for need in ('@loader_path/.jbroot/usr/lib/libroothide.dylib',
+                 '@loader_path/.jbroot/usr/lib/libsubstrate.dylib',
+                 '@loader_path/.jbroot/Library/MobileSubstrate/DynamicLibraries/Switch.dylib'):
+        if need not in want:
+            print(f"    !! 缺少 {need}"); ok = False
+print("DEPS_OK" if ok else "DEPS_FAILED")
+sys.exit(0 if ok else 1)
+PY
+
 echo "===== 4. 打包 ====="
 STAGE=/tmp/dns-stage
 rm -rf "$STAGE"
-JB="$STAGE/var/jb"
+# 包内路径按「航の开关」的布局：顶层就是 Library/ 与 usr/，不带 var/jb 前缀
+# （roothide 的 dpkg 以 jbroot 为根，plain 路径才会落到 /Library/MobileSubstrate/…）
+JB="$STAGE"
 mkdir -p "$STAGE/DEBIAN" "$JB/Library/MobileSubstrate/DynamicLibraries" \
          "$JB/Library/PreferenceBundles/SwitchPrefs.bundle" \
          "$JB/Library/PreferenceLoader/Preferences"
@@ -113,8 +165,8 @@ killall -9 Preferences 2>/dev/null || true
 exit 0
 EOF
 chmod 755 "$STAGE/DEBIAN/postinst"
-find "$STAGE/var" -type d -exec chmod 755 {} \;
-find "$STAGE/var" -type f -exec chmod 644 {} \;
+find "$STAGE/Library" "$STAGE/usr" -type d -exec chmod 755 {} \;
+find "$STAGE/Library" "$STAGE/usr" -type f -exec chmod 644 {} \;
 chmod 755 "$JB/Library/MobileSubstrate/DynamicLibraries/Switch.dylib"
 chmod 755 "$JB/Library/PreferenceBundles/SwitchPrefs.bundle/SwitchPrefs"
 

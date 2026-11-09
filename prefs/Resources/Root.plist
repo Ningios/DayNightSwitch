@@ -60,7 +60,7 @@
 			<key>cell</key>
 			<string>PSGroupCell</string>
 			<key>footerText</key>
-			<string>设计：Dribbble（Ramakrishna / Tsuriel）· 实现参考：Finn Gaida《DayNightSwitch》(MIT) · 插件：Ning</string>
+			<string>插件：Ning</string>
 			<key>label</key>
 			<string>关于</string>
 		</dict>

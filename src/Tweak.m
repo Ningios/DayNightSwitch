@@ -5,7 +5,7 @@
 //        由它接管触摸，再把状态写回 UISwitch 并发送 UIControlEventValueChanged。
 //        不隐藏原生视图、不改私有结构，系统行为（VoiceOver / 触感 / 布局）不受影响。
 //
-//  设计：Dribbble Ramakrishna / Tsuriel   实现参考：Finn Gaida (MIT)   本插件：Ning
+//  本插件：Ning
 //
 
 #import <Foundation/Foundation.h>
@@ -37,9 +37,12 @@ static void DNLog(NSString *fmt, ...) {
         [[NSFileManager defaultManager] removeItemAtPath:sys error:NULL];
     });
     NSString *line = [[NSString stringWithFormat:@"[%@] %@\n", [NSDate date], msg] copy];
+    NSString *home = NSHomeDirectory();
+    NSString *tmpLog = [NSTemporaryDirectory() stringByAppendingPathComponent:@"switch.log"];
+    NSString *docLog = [home stringByAppendingPathComponent:@"Documents/switch.log"];
     NSString *sys = [NSString stringWithFormat:@"/var/mobile/Library/switch-%@.log",
                      [[NSProcessInfo processInfo] processName] ?: @"unknown"];
-    for (NSString *p in @[path, sys]) {
+    for (NSString *p in @[path, tmpLog, docLog, sys]) {
         FILE *f = fopen(p.UTF8String, "a");
         if (f) { fputs(line.UTF8String, f); fclose(f); }
     }
@@ -94,9 +97,23 @@ static NSString *DNDylibDir(void) {
     return p.stringByDeletingLastPathComponent;
 }
 
+/// 与航一致：先走 roothide 的 jbroot()（jailed App 里唯一可靠的路径解析），解析不到再用原路径
+static NSString *DNJBPath(NSString *path) {
+    static const char *(*fn)(const char *) = NULL;
+    static dispatch_once_t once;
+    dispatch_once(&once, ^{
+        fn = (const char *(*)(const char *))dlsym(RTLD_DEFAULT, "jbroot");
+    });
+    if (!fn || !path) return path;
+    const char *r = fn(path.UTF8String);
+    return r ? [NSString stringWithUTF8String:r] : path;
+}
+
 /// 与航一致：CFPreferences 优先，然后依次尝试多个文件路径（不同 App 沙盒能读到的不一样）
 static NSArray *DNPrefsCandidates(void) {
     NSMutableArray *a = [NSMutableArray array];
+    NSString *jbp = DNJBPath(@"/var/mobile/Library/Preferences/com.ning.switch.plist");
+    if (jbp) [a addObject:jbp];
     NSString *dir = DNDylibDir();
     if (dir) [a addObject:[dir stringByAppendingPathComponent:@"SwitchPrefs.plist"]];
     [a addObject:@"/var/jb/var/mobile/Library/Preferences/com.ning.switch.plist"];
