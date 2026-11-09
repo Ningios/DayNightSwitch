@@ -14,15 +14,23 @@ xcodebuild -version | head -2
 echo "SDK: $SDK"
 
 echo "===== 1. 编译 dylib（arm64e + arm64）====="
+SRCS="src/Tweak.m src/DNToggleView.m src/DNLiquidSwitchHost.m \
+src/liquidview/Runtime/LGLiquidGlassRuntime.m \
+src/liquidview/Shared/LGSharedSupport.m \
+src/liquidview/Shared/LGBackButtonSupport.m \
+src/liquidview/Shared/LGMetalShaderSource.m \
+src/liquidview/Shared/LGGlassRenderer.m \
+src/liquidview/Shared/LGBannerCaptureSupport.m \
+src/liquidview/Shared/LGHookSupport.m \
+src/liquidview/Runtime/LGSnapshotCaptureSupport.m"
 for ARCH in arm64e arm64; do
   xcrun --sdk iphoneos clang -fobjc-arc -O2 -isysroot "$SDK" \
     -target ${ARCH}-apple-ios15.0 -dynamiclib -Isrc -Isrc/liquidview -Isrc/liquidview/Shared \
     -framework Foundation -framework UIKit -framework QuartzCore -framework CoreGraphics \
-    -framework Metal -framework MetalKit -framework CoreVideo -framework CoreImage \
+    -framework Metal -framework MetalKit -framework CoreLocation -framework CoreVideo -framework CoreMedia \
     -Wl,-undefined,dynamic_lookup \
     -Wl,-install_name,@loader_path/Switch.dylib \
-    -o "$OUT/Switch-$ARCH.dylib" src/Tweak.m src/DNToggleView.m src/DNLiquidSwitchHost.m \
-    src/liquidview/Runtime/*.m src/liquidview/Shared/*.m
+    -o "$OUT/Switch-$ARCH.dylib" $SRCS
 done
 xcrun lipo -create -output "$OUT/Switch.dylib" \
   "$OUT/Switch-arm64e.dylib" "$OUT/Switch-arm64.dylib"
