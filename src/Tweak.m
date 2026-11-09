@@ -24,11 +24,22 @@ static void DNLog(NSString *fmt, ...) {
     va_list ap; va_start(ap, fmt);
     NSString *msg = [[NSString alloc] initWithFormat:fmt arguments:ap];
     va_end(ap);
-    NSString *line = [[NSString alloc] initWithFormat:@"[%@] %@\n",
-        [NSDate date], msg];
-    FILE *f = fopen("/var/mobile/Library/daynightswitch-tweak.log", "a");
+    // 每进程一个小文件（首次调用时清空），便于精确读取
+    static NSString *path = nil;
+    static dispatch_once_t once;
+    dispatch_once(&once, ^{
+        NSString *name = [[NSProcessInfo processInfo] processName] ?: @"unknown";
+        path = [NSString stringWithFormat:@"/var/mobile/Library/switch-%@.log", name];
+        [[NSFileManager defaultManager] removeItemAtPath:path error:NULL];
+    });
+    NSString *line = [[NSString alloc] initWithFormat:@"[%@] %@\n", [NSDate date], msg];
+    FILE *f = fopen(path.UTF8String, "a");
     if (f) { fputs(line.UTF8String, f); fclose(f); }
+    // 同时保留汇总日志（可选）
 }
+
+static void DNProbe(NSString *msg) { DNLog(@"%@", msg); }
+static BOOL DNShouldApply(void);
 
 // —— 偏好 ——
 static BOOL gEnabled   = YES;
@@ -84,6 +95,8 @@ static NSDictionary *DNPrefsDict(void) {
     static int logged = 0;
     if (logged < 8) {
         logged++;
+        DNProbe([NSString stringWithFormat:@"src cf=%d real=%d jb=%d",
+                 cf ? 1 : 0, dR ? 1 : 0, dJ ? 1 : 0]);
         DNLog(@"读取源: cf=%@ real=%@ jb=%@",
               cf ? @(cf.count) : @"nil",
               dR ? @(dR.count) : @"nil",
@@ -119,8 +132,15 @@ static void DNLoadPrefs(void) {
     gGlobal          = DNGetBool(@"global", YES);
     gExcludeSettings = DNGetBool(@"excludeSettings", NO);
     gLiquid          = DNGetBool(@"liquid", NO);
-    DNLog(@"偏好 enabled=%d global=%d exclude=%d liquid=%d",
-          gEnabled, gGlobal, gExcludeSettings, gLiquid);
+    static int lastE = -1, lastG = -1, lastX = -1;
+    if (lastE != gEnabled || lastG != gGlobal || lastX != gExcludeSettings) {
+        lastE = gEnabled; lastG = gGlobal; lastX = gExcludeSettings;
+        DNLog(@"偏好 enabled=%d global=%d exclude=%d liquid=%d",
+              gEnabled, gGlobal, gExcludeSettings, gLiquid);
+    }
+    DNProbe([NSString stringWithFormat:@"proc=%@ apply=%d E=%d G=%d X=%d",
+             [[NSProcessInfo processInfo] processName],
+             DNShouldApply() ? 1 : 0, gEnabled, gGlobal, gExcludeSettings]);
 }
 
 /// 当前进程是否需要 + 允许套用
@@ -257,17 +277,42 @@ static void DN_setOn(UISwitch *self, SEL _cmd, BOOL on) {
     [DNOverlay(self) setOn:on animated:NO];
 }
 
-static void DNRefreshAll(void) {
-    for (UISwitch *sw in DNAllSwitches().allObjects) {
-        if (DNShouldApply()) DNAttach(sw);
-        else DNDetach(sw);
+/// 遍历视图树（航的做法：每次变更扫全窗口，而不是只查登记表）
+static void DNVisitSwitchSubtree(UIView *v, BOOL apply, NSInteger *before, NSInteger *after) {
+    if (!v) return;
+    if ([v isKindOfClass:[UISwitch class]]) {
+        UISwitch *sw = (UISwitch *)v;
+        if (DNOverlay(sw) || [DNLiquidSwitchHost isAttached:sw]) (*before)++;
+        if (apply) DNAttach(sw); else DNDetach(sw);
+        if (DNOverlay(sw) || [DNLiquidSwitchHost isAttached:sw]) (*after)++;
+        [sw setNeedsLayout];
     }
+    for (UIView *sub in v.subviews) DNVisitSwitchSubtree(sub, apply, before, after);
+}
+
+static void DNRefreshAll(void) {
+    BOOL apply = DNShouldApply();
+    NSInteger before = 0, after = 0;
+
+    // 1) 遍历所有窗口的视图树（主要路径）
+    for (UIWindow *w in [UIApplication sharedApplication].windows) {
+        DNVisitSwitchSubtree(w, apply, &before, &after);
+    }
+    // 2) 登记表兜底（树里可能暂时不在这条链上）
+    for (UISwitch *sw in DNAllSwitches().allObjects) {
+        if (DNOverlay(sw) || [DNLiquidSwitchHost isAttached:sw]) before++;
+        if (apply) DNAttach(sw); else DNDetach(sw);
+        if (DNOverlay(sw) || [DNLiquidSwitchHost isAttached:sw]) after++;
+    }
+    DNLog(@"刷新: apply=%d 挂载前=%ld 挂载后=%ld", apply, (long)before, (long)after);
 }
 
 static void DNPrefsChanged(CFNotificationCenterRef center, void *observer,
                            CFStringRef name, const void *object, CFDictionaryRef info) {
     DNLoadPrefs();
     dispatch_async(dispatch_get_main_queue(), ^{ DNRefreshAll(); });
+    dispatch_after(dispatch_time(DISPATCH_TIME_NOW, (int64_t)(0.25 * NSEC_PER_SEC)),
+                   dispatch_get_main_queue(), ^{ DNRefreshAll(); });
 }
 
 __attribute__((constructor)) static void DNInit(void) {

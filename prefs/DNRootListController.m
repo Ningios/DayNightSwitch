@@ -35,8 +35,15 @@ static void DNLog(NSString *fmt, ...) {
     va_list ap; va_start(ap, fmt);
     NSString *msg = [[NSString alloc] initWithFormat:fmt arguments:ap];
     va_end(ap);
+    static NSString *path = nil;
+    static dispatch_once_t once;
+    dispatch_once(&once, ^{
+        NSString *name = [[NSProcessInfo processInfo] processName] ?: @"unknown";
+        path = [NSString stringWithFormat:@"/var/mobile/Library/switch-prefs-%@.log", name];
+        [[NSFileManager defaultManager] removeItemAtPath:path error:NULL];
+    });
     NSString *line = [msg stringByAppendingString:@"\n"];
-    FILE *f = fopen("/var/mobile/Library/daynightswitch-prefs.log", "a");
+    FILE *f = fopen(path.UTF8String, "a");
     if (f) { fputs(line.UTF8String, f); fclose(f); }
 }
 
