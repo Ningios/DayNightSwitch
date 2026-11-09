@@ -73,40 +73,47 @@ static NSDate *DNFileMTime(NSString *path) {
     return a[NSFileModificationDate];
 }
 
-/// 与航一致：主通道 CFPreferences（CopyMultiple），读不到才落到两份文件
+/// 与航一致：CFPreferences 优先，然后依次尝试多个文件路径（不同 App 沙盒能读到的不一样）
+static NSArray *DNPrefsCandidates(void) {
+    NSMutableArray *a = [NSMutableArray array];
+    [a addObject:@"/var/jb/var/mobile/Library/Preferences/com.ning.switch.plist"];
+    NSString *derived = DNPrefsJbRootPath();
+    if (derived) [a addObject:derived];
+    [a addObject:DNPrefsRealPath()];
+    return a;
+}
+
 static NSDictionary *DNPrefsDict(void) {
-    NSString *real = DNPrefsRealPath();
-    NSString *jb = DNPrefsJbRootPath();
+    NSMutableDictionary *out = [NSMutableDictionary dictionary];
 
     NSArray *keys = @[@"enabled", @"global", @"excludeSettings", @"liquid"];
-    NSDictionary *cf = nil;
     CFDictionaryRef got = CFPreferencesCopyMultiple((__bridge CFArrayRef)keys,
                                                     CFSTR("com.ning.switch"),
                                                     kCFPreferencesCurrentUser,
                                                     kCFPreferencesAnyHost);
+    NSDictionary *cf = nil;
     if (got) {
         cf = (__bridge_transfer NSDictionary *)got;
         if (cf.count == 0) cf = nil;
     }
 
-    NSDictionary *dR = [NSDictionary dictionaryWithContentsOfFile:real];
-    NSDictionary *dJ = jb ? [NSDictionary dictionaryWithContentsOfFile:jb] : nil;
+    NSMutableArray *hit = [NSMutableArray array];
+    for (NSString *path in DNPrefsCandidates()) {
+        NSDictionary *d = [NSDictionary dictionaryWithContentsOfFile:path];
+        if (d) {
+            [hit addObject:path.lastPathComponent];
+            [out addEntriesFromDictionary:d];
+            break;   // 第一个能读到的为准
+        }
+    }
+    if (cf) [out addEntriesFromDictionary:cf];   // cf 优先
 
     static int logged = 0;
     if (logged < 8) {
         logged++;
-        DNProbe([NSString stringWithFormat:@"src cf=%d real=%d jb=%d",
-                 cf ? 1 : 0, dR ? 1 : 0, dJ ? 1 : 0]);
-        DNLog(@"读取源: cf=%@ real=%@ jb=%@",
-              cf ? @(cf.count) : @"nil",
-              dR ? @(dR.count) : @"nil",
-              dJ ? @(dJ.count) : @"nil");
+        DNLog(@"读取源: cf=%@ 文件=%@ 键数=%lu", cf ? @(cf.count) : @"nil",
+              hit.count ? hit[0] : @"nil", (unsigned long)out.count);
     }
-
-    NSMutableDictionary *out = [NSMutableDictionary dictionary];
-    if (dJ) [out addEntriesFromDictionary:dJ];
-    if (dR) [out addEntriesFromDictionary:dR];
-    if (cf) [out addEntriesFromDictionary:cf];   // cf 优先
     return out;
 }
 
