@@ -12,6 +12,7 @@
 #import <UIKit/UIKit.h>
 #import <objc/runtime.h>
 #import "DNToggleView.h"
+#import "DNLiquidSwitchHost.h"
 
 extern void MSHookMessageEx(Class cls, SEL sel, IMP imp, IMP *result);
 
@@ -33,6 +34,7 @@ static void DNLog(NSString *fmt, ...) {
 static BOOL gEnabled   = YES;
 static BOOL gGlobal    = YES;   // YES: 所有 App；NO: 只在「设置」
 static BOOL gExcludeSettings = NO;
+static BOOL gLiquid = NO;   // 液态开关（航同款 LiquidGlassView）
 
 static NSString *const kDNBundleID = @"com.ning.switch";
 static NSString *const kDNNotify   = @"com.ning.switch/settingschanged";
@@ -60,10 +62,39 @@ static NSDate *DNFileMTime(NSString *path) {
     return a[NSFileModificationDate];
 }
 
-/// 唯一数据源：真实路径的一份 plist（jbroot / cfprefsd 都不参与）
+/// 与航一致：主通道 CFPreferences（CopyMultiple），读不到才落到两份文件
 static NSDictionary *DNPrefsDict(void) {
-    NSDictionary *d = [NSDictionary dictionaryWithContentsOfFile:DNPrefsRealPath()];
-    return d ?: @{};
+    NSString *real = DNPrefsRealPath();
+    NSString *jb = DNPrefsJbRootPath();
+
+    NSArray *keys = @[@"enabled", @"global", @"excludeSettings", @"liquid"];
+    NSDictionary *cf = nil;
+    CFDictionaryRef got = CFPreferencesCopyMultiple((__bridge CFArrayRef)keys,
+                                                    CFSTR("com.ning.switch"),
+                                                    kCFPreferencesCurrentUser,
+                                                    kCFPreferencesAnyHost);
+    if (got) {
+        cf = (__bridge_transfer NSDictionary *)got;
+        if (cf.count == 0) cf = nil;
+    }
+
+    NSDictionary *dR = [NSDictionary dictionaryWithContentsOfFile:real];
+    NSDictionary *dJ = jb ? [NSDictionary dictionaryWithContentsOfFile:jb] : nil;
+
+    static int logged = 0;
+    if (logged < 8) {
+        logged++;
+        DNLog(@"读取源: cf=%@ real=%@ jb=%@",
+              cf ? @(cf.count) : @"nil",
+              dR ? @(dR.count) : @"nil",
+              dJ ? @(dJ.count) : @"nil");
+    }
+
+    NSMutableDictionary *out = [NSMutableDictionary dictionary];
+    if (dJ) [out addEntriesFromDictionary:dJ];
+    if (dR) [out addEntriesFromDictionary:dR];
+    if (cf) [out addEntriesFromDictionary:cf];   // cf 优先
+    return out;
 }
 
 static BOOL DNValueToBool(id v, BOOL fallback) {
@@ -87,8 +118,9 @@ static void DNLoadPrefs(void) {
     gEnabled         = DNGetBool(@"enabled", YES);
     gGlobal          = DNGetBool(@"global", YES);
     gExcludeSettings = DNGetBool(@"excludeSettings", NO);
-    DNLog(@"偏好 enabled=%d global=%d exclude=%d (merged)",
-          gEnabled, gGlobal, gExcludeSettings);
+    gLiquid          = DNGetBool(@"liquid", NO);
+    DNLog(@"偏好 enabled=%d global=%d exclude=%d liquid=%d",
+          gEnabled, gGlobal, gExcludeSettings, gLiquid);
 }
 
 /// 当前进程是否需要 + 允许套用
@@ -128,6 +160,14 @@ static void DNAttach(UISwitch *sw) {
         return;
     }
 
+    // 液态模式：走独立实例宿主，不进 DNToggleView
+    if (gLiquid) {
+        DNDetach(sw);
+        [DNLiquidSwitchHost applyToSwitch:sw];
+        return;
+    }
+    [DNLiquidSwitchHost removeFromSwitch:sw];
+
     DNToggleView *v = DNOverlay(sw);
     if (!v) {
         v = [[DNToggleView alloc] initWithFrame:b];
@@ -160,6 +200,7 @@ static void DNAttach(UISwitch *sw) {
 }
 
 static void DNDetach(UISwitch *sw) {
+    [DNLiquidSwitchHost removeFromSwitch:sw];
     DNToggleView *v = DNOverlay(sw);
     if (!v) return;
     [v removeFromSuperview];
@@ -189,6 +230,10 @@ static void DN_didMoveToSuperview(UISwitch *self, SEL _cmd) {
 static void DN_layoutSubviews(UISwitch *self, SEL _cmd) {
     orig_layoutSubviews(self, _cmd);
     if (!DNShouldApply()) { DNDetach(self); return; }
+    if (gLiquid) {
+        if ([DNLiquidSwitchHost isAttached:self]) [DNLiquidSwitchHost applyToSwitch:self];
+        return;
+    }
     DNToggleView *v = DNOverlay(self);
     if (!DNSaneBounds(self.bounds)) { DNDetach(self); return; }
     v.hidden = NO;

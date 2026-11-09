@@ -16,11 +16,13 @@ echo "SDK: $SDK"
 echo "===== 1. 编译 dylib（arm64e + arm64）====="
 for ARCH in arm64e arm64; do
   xcrun --sdk iphoneos clang -fobjc-arc -O2 -isysroot "$SDK" \
-    -target ${ARCH}-apple-ios15.0 -dynamiclib -Isrc \
+    -target ${ARCH}-apple-ios15.0 -dynamiclib -Isrc -Isrc/liquidview -Isrc/liquidview/Shared \
     -framework Foundation -framework UIKit -framework QuartzCore -framework CoreGraphics \
+    -framework Metal -framework MetalKit -framework CoreVideo -framework CoreImage \
     -Wl,-undefined,dynamic_lookup \
     -Wl,-install_name,@loader_path/Switch.dylib \
-    -o "$OUT/Switch-$ARCH.dylib" src/Tweak.m src/DNToggleView.m
+    -o "$OUT/Switch-$ARCH.dylib" src/Tweak.m src/DNToggleView.m src/DNLiquidSwitchHost.m \
+    src/liquidview/Runtime/*.m src/liquidview/Shared/*.m
 done
 xcrun lipo -create -output "$OUT/Switch.dylib" \
   "$OUT/Switch-arm64e.dylib" "$OUT/Switch-arm64.dylib"

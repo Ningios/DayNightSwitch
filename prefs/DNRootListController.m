@@ -71,10 +71,16 @@ static void DNStorePref(NSString *key, id value) {
     // 两份都写：真实路径 + jbroot 路径（不同进程看到的是不同文件，必须同步）
     NSMutableDictionary *d = [DNMergedPrefs2() mutableCopy] ?: [NSMutableDictionary dictionary];
     if (value) d[key] = value; else [d removeObjectForKey:key];
-    [d writeToFile:DNPrefsRealPath() atomically:YES];
+    CFPreferencesSetAppValue((__bridge CFStringRef)key, (__bridge CFPropertyListRef)value,
+                             (__bridge CFStringRef)kDNBundleID);
+    CFPreferencesAppSynchronize((__bridge CFStringRef)kDNBundleID);
+    BOOL okR = [d writeToFile:DNPrefsRealPath() atomically:YES];
     NSString *jb = DNPrefsJbRootPath();
-    if (jb) [d writeToFile:jb atomically:YES];
-    DNLog(@"[写] %@=%@ real=%@ jb=%@", key, value, DNPrefsRealPath(), jb ?: @"-");
+    BOOL okJ = jb ? [d writeToFile:jb atomically:YES] : NO;
+    BOOL exR = [[NSFileManager defaultManager] fileExistsAtPath:DNPrefsRealPath()];
+    BOOL exJ = jb ? [[NSFileManager defaultManager] fileExistsAtPath:jb] : NO;
+    DNLog(@"[写] %@=%@ okReal=%d(存在%d) okJb=%d(存在%d) jb=%@",
+          key, value, okR, exR, okJ, exJ, jb ?: @"-");
 }
 
 @interface DNRootListController : PSListController
