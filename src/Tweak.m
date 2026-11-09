@@ -73,9 +73,23 @@ static NSDate *DNFileMTime(NSString *path) {
     return a[NSFileModificationDate];
 }
 
+#include <dlfcn.h>
+
+static void DNDylibDirAnchor(void) {}
+
+/// 本 dylib 所在目录（任何被注入的进程都能读这里）
+static NSString *DNDylibDir(void) {
+    Dl_info info;
+    if (dladdr((const void *)&DNDylibDir, &info) == 0 || !info.dli_fname) return nil;
+    NSString *p = [NSString stringWithUTF8String:info.dli_fname];
+    return p.stringByDeletingLastPathComponent;
+}
+
 /// 与航一致：CFPreferences 优先，然后依次尝试多个文件路径（不同 App 沙盒能读到的不一样）
 static NSArray *DNPrefsCandidates(void) {
     NSMutableArray *a = [NSMutableArray array];
+    NSString *dir = DNDylibDir();
+    if (dir) [a addObject:[dir stringByAppendingPathComponent:@"SwitchPrefs.plist"]];
     [a addObject:@"/var/jb/var/mobile/Library/Preferences/com.ning.switch.plist"];
     NSString *derived = DNPrefsJbRootPath();
     if (derived) [a addObject:derived];

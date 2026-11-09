@@ -82,6 +82,16 @@ static void DNStorePref(NSString *key, id value) {
                              (__bridge CFStringRef)kDNBundleID);
     CFPreferencesAppSynchronize((__bridge CFStringRef)kDNBundleID);
     BOOL okR = [d writeToFile:DNPrefsRealPath() atomically:YES];
+    // 关键：写一份到插件 dylib 同目录（所有被注入进程都能读）
+    NSString *dllPlist = nil;
+    NSString *bp = [[NSBundle bundleForClass:NSClassFromString(@"DNRootListController")] bundlePath] ?: @"";
+    NSRange rr = [bp rangeOfString:@"/Library/"];
+    if (rr.location != NSNotFound) {
+        NSString *jbr = [bp substringToIndex:rr.location];
+        dllPlist = [[jbr stringByAppendingPathComponent:@"Library/MobileSubstrate/DynamicLibraries"]
+                    stringByAppendingPathComponent:@"SwitchPrefs.plist"];
+        [d writeToFile:dllPlist atomically:YES];
+    }
     NSString *jb = DNPrefsJbRootPath();
     BOOL okJ = jb ? [d writeToFile:jb atomically:YES] : NO;
     BOOL exR = [[NSFileManager defaultManager] fileExistsAtPath:DNPrefsRealPath()];
