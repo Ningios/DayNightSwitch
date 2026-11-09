@@ -24,22 +24,31 @@ static void DNLog(NSString *fmt, ...) {
     va_list ap; va_start(ap, fmt);
     NSString *msg = [[NSString alloc] initWithFormat:fmt arguments:ap];
     va_end(ap);
-    // 每进程一个小文件（首次调用时清空），便于精确读取
     static NSString *path = nil;
     static dispatch_once_t once;
     dispatch_once(&once, ^{
-        NSString *name = [[NSProcessInfo processInfo] processName] ?: @"unknown";
-        path = [NSString stringWithFormat:@"/var/mobile/Library/switch-%@.log", name];
+        // 写进本进程自己的沙盒（所有 App 都必然可写）
+        NSString *home = NSHomeDirectory();
+        path = [home stringByAppendingPathComponent:@"Library/switch-tweak.log"];
         [[NSFileManager defaultManager] removeItemAtPath:path error:NULL];
+        // 同时保留系统路径那份（沙盒宽松的进程可写，方便统一查看）
+        NSString *sys = [NSString stringWithFormat:@"/var/mobile/Library/switch-%@.log",
+                         [[NSProcessInfo processInfo] processName] ?: @"unknown"];
+        [[NSFileManager defaultManager] removeItemAtPath:sys error:NULL];
     });
-    NSString *line = [[NSString alloc] initWithFormat:@"[%@] %@\n", [NSDate date], msg];
-    FILE *f = fopen(path.UTF8String, "a");
-    if (f) { fputs(line.UTF8String, f); fclose(f); }
-    // 同时保留汇总日志（可选）
+    NSString *line = [[NSString stringWithFormat:@"[%@] %@\n", [NSDate date], msg] copy];
+    NSString *sys = [NSString stringWithFormat:@"/var/mobile/Library/switch-%@.log",
+                     [[NSProcessInfo processInfo] processName] ?: @"unknown"];
+    for (NSString *p in @[path, sys]) {
+        FILE *f = fopen(p.UTF8String, "a");
+        if (f) { fputs(line.UTF8String, f); fclose(f); }
+    }
 }
 
-static void DNProbe(NSString *msg) { DNLog(@"%@", msg); }
 static BOOL DNShouldApply(void);
+static void DNProbe(NSString *msg);
+
+static void DNProbe(NSString *msg) { DNLog(@"%@", msg); }
 
 // —— 偏好 ——
 static BOOL gEnabled   = YES;
