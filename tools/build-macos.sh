@@ -28,8 +28,9 @@ for ARCH in arm64e arm64; do
     -target ${ARCH}-apple-ios15.0 -dynamiclib -Isrc -Isrc/liquidview -Isrc/liquidview/Shared \
     -framework Foundation -framework UIKit -framework QuartzCore -framework CoreGraphics \
     -framework Metal -framework MetalKit -framework CoreLocation -framework CoreVideo -framework CoreMedia \
+    -Ltools/stubs -lsubstrate \
     -Wl,-undefined,dynamic_lookup \
-    -Wl,-install_name,@loader_path/Switch.dylib \
+    -Wl,-install_name,@loader_path/.jbroot/Library/MobileSubstrate/DynamicLibraries/Switch.dylib \
     -o "$OUT/Switch-$ARCH.dylib" $SRCS
 done
 xcrun lipo -create -output "$OUT/Switch.dylib" \
