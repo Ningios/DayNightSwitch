@@ -68,11 +68,13 @@ static NSDictionary *DNMergedPrefs2(void) {
 }
 
 static void DNStorePref(NSString *key, id value) {
-    // 只写真实路径这一份（与 tweak 同源，避免被其它副本覆盖）
+    // 两份都写：真实路径 + jbroot 路径（不同进程看到的是不同文件，必须同步）
     NSMutableDictionary *d = [DNMergedPrefs2() mutableCopy] ?: [NSMutableDictionary dictionary];
     if (value) d[key] = value; else [d removeObjectForKey:key];
     [d writeToFile:DNPrefsRealPath() atomically:YES];
-    DNLog(@"[写] %@=%@ -> %@", key, value, DNPrefsRealPath());
+    NSString *jb = DNPrefsJbRootPath();
+    if (jb) [d writeToFile:jb atomically:YES];
+    DNLog(@"[写] %@=%@ real=%@ jb=%@", key, value, DNPrefsRealPath(), jb ?: @"-");
 }
 
 @interface DNRootListController : PSListController
