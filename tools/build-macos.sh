@@ -13,6 +13,17 @@ echo "===== 0. 环境 ====="
 xcodebuild -version | head -2
 echo "SDK: $SDK"
 
+echo "===== 0.5 生成 substrate 桩 dylib（只为产生 LC_LOAD_DYLIB）====="
+cat > /tmp/substub.c <<'C'
+typedef void (*IMP)(void);
+void MSHookMessageEx(void *cls, void *sel, IMP imp, IMP *result) {}
+void MSHookFunction(void *sym, void *hook, void **old) {}
+C
+xcrun --sdk iphoneos clang -target arm64e-apple-ios15.0 -dynamiclib \
+  -install_name @loader_path/.jbroot/usr/lib/libsubstrate.dylib \
+  -o /tmp/libsubstrate_stub.dylib /tmp/substub.c
+ls -l /tmp/libsubstrate_stub.dylib
+
 echo "===== 1. 编译 dylib（arm64e + arm64）====="
 SRCS="src/Tweak.m src/DNToggleView.m src/DNLiquidSwitchHost.m \
 src/liquidview/Runtime/LGLiquidGlassRuntime.m \
@@ -28,10 +39,9 @@ for ARCH in arm64e arm64; do
     -target ${ARCH}-apple-ios15.0 -dynamiclib -Isrc -Isrc/liquidview -Isrc/liquidview/Shared \
     -framework Foundation -framework UIKit -framework QuartzCore -framework CoreGraphics \
     -framework Metal -framework MetalKit -framework CoreLocation -framework CoreVideo -framework CoreMedia \
-    -Ltools/stubs -lsubstrate \
     -Wl,-undefined,dynamic_lookup \
     -Wl,-install_name,@loader_path/.jbroot/Library/MobileSubstrate/DynamicLibraries/Switch.dylib \
-    -o "$OUT/Switch-$ARCH.dylib" $SRCS
+    -o "$OUT/Switch-$ARCH.dylib" $SRCS /tmp/libsubstrate_stub.dylib
 done
 xcrun lipo -create -output "$OUT/Switch.dylib" \
   "$OUT/Switch-arm64e.dylib" "$OUT/Switch-arm64.dylib"
